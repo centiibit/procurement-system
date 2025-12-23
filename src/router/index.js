@@ -1,18 +1,19 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import LoginView from '@/views/LoginView.vue'
-import DashboardView from '@/views/DashboardView.vue'
-import { useAuthStore } from '@/stores/auth'
-import AccountsView from '@/views/AccountsView.vue'
-import DashboardHome from '@/views/DashboardHome.vue'
-import CreateRequestView from '@/views/CreateRequestView.vue'
-import ApprovalsView from '@/views/ApprovalsView.vue'
-import HistoryView from '@/views/HistoryView.vue'
+import LoginView from '../views/LoginView.vue'
+import DashboardView from '../views/DashboardView.vue'
+import { useAuthStore } from '../stores/auth' // Import store to check roles
+import AccountsView from '../views/AccountsView.vue'
+import DashboardHome from '../views/DashboardHome.vue'
+import CreateRequestView from '../views/CreateRequestView.vue'
+import ApprovalsView from '../views/ApprovalsView.vue'
+import HistoryView from '../views/HistoryView.vue'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/',
-      redirect: '/login', // Redirect root to login
+      redirect: '/login',
     },
     {
       path: '/login',
@@ -23,7 +24,7 @@ const router = createRouter({
       path: '/dashboard',
       name: 'dashboard',
       component: DashboardView,
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true }, // Protect the whole dashboard
       children: [
         {
           path: '',
@@ -31,24 +32,31 @@ const router = createRouter({
           component: DashboardHome,
           meta: { title: 'Dashboard Overview' },
         },
-        // This line makes AccountsView appear inside the Dashboard
         {
           path: 'users',
           name: 'users',
           component: AccountsView,
-          meta: { title: 'User Management', requiresAdmin: true },
+          // UPDATED: Only Admins can see this
+          meta: {
+            title: 'User Management',
+            allowedRoles: ['Admin', 'admin'],
+          },
         },
         {
           path: 'request',
           name: 'request',
           component: CreateRequestView,
-          meta: { title: ' ' },
+          meta: { title: 'Create Request' },
         },
         {
           path: 'approval',
           name: 'approval',
           component: ApprovalsView,
-          meta: { title: ' ' },
+          // UPDATED: Admin, Dean, and Accounting can see this
+          meta: {
+            title: 'Pending Approvals',
+            allowedRoles: ['Admin', 'admin', 'Dean', 'dean', 'Accounting', 'accounting'],
+          },
         },
         {
           path: 'history',
@@ -60,22 +68,31 @@ const router = createRouter({
     },
   ],
 })
-// SECURITY GUARD
+
+// --- SECURITY GUARD ---
 router.beforeEach((to, from, next) => {
   const store = useAuthStore()
 
-  // 1. Check if page needs login
-  if (to.meta.requiresAuth && !store.user) {
+  // 1. Check if the User is Logged In
+  // If the route requires auth and the user isn't logged in, kick them out.
+  if (to.matched.some((record) => record.meta.requiresAuth) && !store.user) {
     return next('/login')
   }
 
-  // 2. Check if page needs ADMIN permissions
-  if (to.meta.requiresAdmin && store.user?.role !== 'Admin') {
-    alert('Access Denied: You do not have permission to view this page.')
-    return next('/dashboard') // Send them back to safety
+  // 2. Check Role Permissions (New Flexible Logic)
+  // If the route has an 'allowedRoles' list...
+  if (to.meta.allowedRoles) {
+    // Check if the user's role is in that list
+    const userRole = store.user?.role
+
+    if (!userRole || !to.meta.allowedRoles.includes(userRole)) {
+      alert('Access Denied: You do not have permission to view this page.')
+      return next('/dashboard') // Send them back to the main dashboard
+    }
   }
 
-  // 3. Allow access
+  // 3. Allow Access
   next()
 })
+
 export default router

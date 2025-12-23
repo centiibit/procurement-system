@@ -1,68 +1,88 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
-import axios from 'axios'
-
-const API_URL = 'http://localhost:3000/users'
+import { supabase } from '../supabase' // ⚠️ Make sure this matches your file path!
 
 export const useAuthStore = defineStore('auth', () => {
+  // 1. STATE: Load user from localStorage if available
   const user = ref(JSON.parse(localStorage.getItem('user')) || null)
-  const accounts = ref([]) // Stores the list of users
+  const accounts = ref([]) // Stores the list of users for Admin View
 
-  // 1. LOGIN (Checks Database)
+  // 2. LOGIN (Checks 'profiles' table)
   async function login(username, password) {
     try {
-      const res = await axios.get(`${API_URL}?username=${username}&password=${password}`)
-      if (res.data.length > 0) {
-        user.value = res.data[0]
-        localStorage.setItem('user', JSON.stringify(user.value))
-        return true
-      }
-    } catch (e) {
-      console.error(e)
-    }
-    return false
-  }
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('username', username)
+        .eq('password', password)
+        .single() // Expect exactly one match
 
-  // 2. LOGOUT
-  function logout() {
-    user.value = null
-    localStorage.removeItem('user')
-  }
+      if (error || !data) throw error
 
-  // 3. GET USERS (Loads the table)
-  async function fetchAccounts() {
-    try {
-      const res = await axios.get(API_URL)
-      accounts.value = res.data
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  // 4. ADD USER (Saves to DB)
-  async function addAccount(formData) {
-    try {
-      const newUser = {
-        ...formData,
-        id: Date.now().toString(), // Unique ID
-      }
-
-      const res = await axios.post(API_URL, newUser)
-      accounts.value.push(res.data)
+      // Success: Update state and localStorage
+      user.value = data
+      localStorage.setItem('user', JSON.stringify(data))
       return true
     } catch (e) {
-      console.error(e)
+      console.error('Login Error:', e.message)
       return false
     }
   }
 
-  // 5. DELETE USER
+  // 3. LOGOUT
+  function logout() {
+    user.value = null
+    localStorage.removeItem('user')
+    // Optional: If using real Supabase Auth, you would add: await supabase.auth.signOut()
+  }
+
+  // 4. GET USERS (Loads the table for Admin)
+  async function fetchAccounts() {
+    try {
+      const { data, error } = await supabase.from('profiles').select('*')
+
+      if (error) throw error
+
+      accounts.value = data
+    } catch (e) {
+      console.error('Error fetching users:', e.message)
+    }
+  }
+
+  // 5. ADD USER (Saves to Supabase)
+  async function addAccount(formData) {
+    try {
+      // NOTE: We do NOT generate an ID here anymore.
+      // Supabase handles the UUID automatically.
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert([formData]) // Insert the object directly
+        .select()
+
+      if (error) throw error
+
+      // Add the new user to our local list immediately
+      if (data) {
+        accounts.value.push(data[0])
+      }
+      return true
+    } catch (e) {
+      console.error('Error adding user:', e.message)
+      return false
+    }
+  }
+
+  // 6. DELETE USER
   async function deleteAccount(id) {
     try {
-      await axios.delete(`${API_URL}/${id}`)
+      const { error } = await supabase.from('profiles').delete().eq('id', id)
+
+      if (error) throw error
+
+      // Remove from local list so the UI updates instantly
       accounts.value = accounts.value.filter((u) => u.id !== id)
     } catch (e) {
-      console.error(e)
+      console.error('Error deleting user:', e.message)
     }
   }
 

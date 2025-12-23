@@ -1,8 +1,8 @@
 <script setup>
-import { ref, computed } from 'vue' // <--- Added 'computed'
+import { ref, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter, useRoute } from 'vue-router'
-import '@/assets/dashboard.css'
+import '../assets/dashboard.css'
 
 const store = useAuthStore()
 const router = useRouter()
@@ -18,10 +18,8 @@ const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value
 }
 
-// --- NEW CODE: Calculate the title based on the Router ---
+// Calculate the title based on the Router
 const currentTitle = computed(() => {
-  // If the route has a title (like 'User Management'), use it.
-  // Otherwise, default to 'Dashboard Overview'.
   return route.meta.title || 'Dashboard Overview'
 })
 </script>
@@ -49,14 +47,26 @@ const currentTitle = computed(() => {
         <router-link to="/dashboard/request" class="nav-item" active-class="active">
           <span>📝</span> Request
         </router-link>
-        <router-link to="/dashboard/approval" class="nav-item" active-class="active">
+
+        <router-link
+          v-if="
+            ['Admin', 'admin', 'Dean', 'dean', 'Accounting', 'accounting'].includes(
+              store.user?.role,
+            )
+          "
+          to="/dashboard/approval"
+          class="nav-item"
+          active-class="active"
+        >
           <span>✅</span> For Approval
         </router-link>
-        <router-link to="/dashboard/history" class="nav-item" active-class="active"
-          ><span>🕒</span> History</router-link
-        >
+
+        <router-link to="/dashboard/history" class="nav-item" active-class="active">
+          <span>🕒</span> History
+        </router-link>
+
         <router-link
-          v-if="store.user?.role === 'Admin'"
+          v-if="['Admin', 'admin'].includes(store.user?.role)"
           to="/dashboard/users"
           class="nav-item"
           active-class="active"
@@ -74,14 +84,14 @@ const currentTitle = computed(() => {
       <header>
         <div class="header-left">
           <button class="menu-btn" @click="toggleSidebar">☰</button>
-
           <h3>{{ currentTitle }}</h3>
         </div>
 
         <div class="user-info">
-          <span
-            >Welcome, <strong>{{ store.user?.firstname }}</strong></span
-          >
+          <span>
+            Welcome,
+            <strong>{{ store.user?.firstname || store.user?.first_name || 'User' }}</strong>
+          </span>
         </div>
       </header>
 

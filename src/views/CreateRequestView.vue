@@ -1,77 +1,69 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
+import { useRequestStore } from '../stores/requests'
 import { useRouter } from 'vue-router'
+import { supabase } from '../supabase'
 import '@/assets/dashboard.css'
 import '@/assets/create-request.css'
 
 const store = useAuthStore()
+const requestStore = useRequestStore()
 const router = useRouter()
 
 // 1. FORM DATA
 const form = ref({
   referenceNo: 'Generating...',
   purpose: '',
-  dateRequested: new Date().toISOString().substr(0, 10),
   venue: '',
   participants: '',
-  submittedBy: `${store.user?.firstname} ${store.user?.lastname}`,
-  department: store.user?.department,
+  dateRequested: new Date().toISOString().substr(0, 10),
+  submittedBy: `${store.user?.first_name || ''} ${store.user?.last_name || ''}`,
+  department: store.user?.department || '',
   items: [{ particulars: '', amount: 0, quantity: 1, total: 0 }],
 })
 
-// --- SEQUENTIAL REFERENCE NO LOGIC ---
+// 2. GENERATE ID (Same as before)
 onMounted(async () => {
   try {
     const currentYear = new Date().getFullYear().toString().slice(-2)
-    const response = await axios.get('http://localhost:3000/requests')
-    const allRequests = response.data
-    const thisYearRequests = allRequests.filter(
-      (req) => req.id && req.id.startsWith(`${currentYear}-`),
-    )
+    const { data, error } = await supabase
+      .from('requests')
+      .select('id')
+      .ilike('id', `${currentYear}-%`)
+      .order('id', { ascending: false })
+      .limit(1)
 
-    if (thisYearRequests.length === 0) {
+    if (error) throw error
+
+    if (!data || data.length === 0) {
       form.value.referenceNo = `${currentYear}-00001`
     } else {
-      const maxNum = thisYearRequests.reduce((max, req) => {
-        const parts = req.id.split('-')
-        if (parts.length === 2) {
-          const numPart = parseInt(parts[1])
-          return numPart > max ? numPart : max
-        }
-        return max
-      }, 0)
-      const nextNum = maxNum + 1
-      form.value.referenceNo = `${currentYear}-${String(nextNum).padStart(5, '0')}`
+      const lastId = data[0].id
+      const parts = lastId.split('-')
+      if (parts.length === 2) {
+        const nextNum = parseInt(parts[1]) + 1
+        form.value.referenceNo = `${currentYear}-${String(nextNum).padStart(5, '0')}`
+      } else {
+        form.value.referenceNo = `${currentYear}-00001`
+      }
     }
   } catch (error) {
     console.error('Error generating Ref No:', error)
-    form.value.referenceNo = `${new Date().getFullYear().toString().slice(-2)}-ERROR`
+    form.value.referenceNo = `ERR-${Date.now()}`
   }
 })
 
-// 2. TABLE LOGIC
-
-// --- NEW VALIDATION FUNCTIONS ---
-// Use this for Amount (Allows numbers and one dot)
+// 3. CALCULATIONS (Same as before)
 const validateAmount = (event) => {
   const charCode = event.which ? event.which : event.keyCode
-  // Allow dot (46) but only if one doesn't exist yet (logic simplified for basic blocking)
   if (charCode === 46) return true
-  // Block everything that isn't a number (0-9 are 48-57)
-  if (charCode < 48 || charCode > 57) {
-    event.preventDefault()
-  }
+  if (charCode < 48 || charCode > 57) event.preventDefault()
 }
 
-// Use this for Quantity (Allows ONLY numbers, no dots)
 const validateQuantity = (event) => {
   const charCode = event.which ? event.which : event.keyCode
-  // Block everything that isn't a number
-  if (charCode < 48 || charCode > 57) {
-    event.preventDefault()
-  }
+  if (charCode < 48 || charCode > 57) event.preventDefault()
 }
 
 const addItem = () => {
@@ -92,26 +84,47 @@ const grandTotal = computed(() => {
   return form.value.items.reduce((acc, item) => acc + item.total, 0)
 })
 
-// 4. SUBMIT ACTION
+// 4. SUBMIT ACTION (UPDATED LOGIC)
 const handleSubmit = async () => {
   if (!form.value.purpose) return alert('Please state the purpose.')
+  if (grandTotal.value <= 0) return alert('Please add at least one valid item.')
 
-  const newRequest = {
-    id: form.value.referenceNo,
-    ...form.value,
-    grandTotal: grandTotal.value,
-    status: 'Pending',
-    approver: null,
-    walletAddress: store.user?.walletAddress || null,
+  // --- AUTO-APPROVAL LOGIC FOR DEAN ---
+  const userRole = store.user?.role
+  let initialStatus = 'Pending'
+  let deanApprover = null
+  let deanDate = null
+
+  // If the requester IS the Dean, they auto-approve their step.
+  if (userRole === 'Dean' || userRole === 'dean') {
+    initialStatus = 'Approved by Dean'
+    deanApprover = form.value.submittedBy
+    deanDate = new Date().toISOString()
   }
 
-  try {
-    await axios.post('http://localhost:3000/requests', newRequest)
+  const payload = {
+    id: form.value.referenceNo,
+    submitted_by_name: form.value.submittedBy,
+    purpose: form.value.purpose,
+    venue: form.value.venue,
+    participants: form.value.participants,
+    department: form.value.department,
+    items: form.value.items,
+    grand_total: grandTotal.value,
+
+    // Dynamic Fields based on Role
+    status: initialStatus,
+    dean_approver: deanApprover,
+    dean_approval_date: deanDate,
+  }
+
+  console.log('Submitting Payload:', payload)
+
+  const success = await requestStore.createRequest(payload)
+
+  if (success) {
     alert(`Request ${form.value.referenceNo} Submitted Successfully!`)
-    window.location.reload()
-  } catch (error) {
-    console.error(error)
-    alert('Error submitting request.')
+    router.push('/dashboard')
   }
 }
 </script>
@@ -162,7 +175,6 @@ const handleSubmit = async () => {
               <td>
                 <input v-model="item.particulars" placeholder="Item Name" />
               </td>
-
               <td>
                 <input
                   type="number"
@@ -174,7 +186,6 @@ const handleSubmit = async () => {
                   placeholder="0.00"
                 />
               </td>
-
               <td>
                 <input
                   type="number"
@@ -185,11 +196,14 @@ const handleSubmit = async () => {
                   placeholder="1"
                 />
               </td>
-
               <td>
-                <input :value="item.total" readonly tabindex="-1" class="readonly-input" />
+                <input
+                  :value="item.total.toLocaleString(undefined, { minimumFractionDigits: 2 })"
+                  readonly
+                  tabindex="-1"
+                  class="readonly-input"
+                />
               </td>
-
               <td style="text-align: center">
                 <button @click="removeItem(index)" class="btn-remove" title="Remove Row">×</button>
               </td>
@@ -198,7 +212,9 @@ const handleSubmit = async () => {
           <tfoot>
             <tr>
               <td colspan="3" class="text-right"><strong>GRAND TOTAL:</strong></td>
-              <td class="grand-total">{{ grandTotal }}</td>
+              <td class="grand-total">
+                {{ grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 }) }}
+              </td>
               <td style="padding: 0">
                 <button @click="addItem" class="btn-add-row" title="Add Row">+</button>
               </td>

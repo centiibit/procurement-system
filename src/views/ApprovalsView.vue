@@ -1,63 +1,59 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import axios from 'axios'
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import { useRequestStore } from '../stores/requests'
+// Importing your CSS files
 import '@/assets/dashboard.css'
 import '@/assets/approvals.css'
 
 const store = useAuthStore()
-const requests = ref([])
-const isLoading = ref(false)
+const requestStore = useRequestStore()
 
-// MODAL STATE
+// STATE VARIABLES
 const showModal = ref(false)
 const selectedReq = ref(null)
 const rejectionReason = ref('')
+const isLoading = ref(false)
 
-// 1. FETCH DATA
-const fetchRequests = async () => {
-  try {
-    const res = await axios.get('http://localhost:3000/requests')
-    requests.value = res.data
-  } catch (error) {
-    console.error('Error fetching requests:', error)
+// 1. FETCH DATA ON LOAD
+onMounted(() => {
+  if (store.user?.role) {
+    // UPDATED: Now passing (Role, Department) so Deans only see their specific department
+    requestStore.fetchPendingApprovals(store.user.role, store.user.department)
   }
-}
-
-const pendingRequests = computed(() => {
-  return requests.value.filter((req) => req.status === 'Pending')
 })
 
-// 2. OPEN MODAL
+// 2. MODAL CONTROLS
 const openDetails = (req) => {
   selectedReq.value = req
   showModal.value = true
 }
 
-// 3. CLOSE MODAL
 const closeDetails = () => {
   showModal.value = false
   selectedReq.value = null
   rejectionReason.value = ''
 }
 
-// 4. APPROVE ACTION
+// 3. APPROVE LOGIC
 const confirmApprove = async () => {
   if (!selectedReq.value) return
 
   isLoading.value = true
   try {
-    await axios.patch(`http://localhost:3000/requests/${selectedReq.value.id}`, {
-      status: 'Approved',
-      approver: `${store.user.firstname} ${store.user.lastname}`,
-      approverID: store.user.id,
-      approverDepartment: store.user.department,
-      dateApproved: new Date().toISOString().split('T')[0],
-    })
+    const role = store.user.role
+    const dept = store.user.department
+    const approverName = `${store.user.first_name} ${store.user.last_name}`
 
-    alert('Request Approved Successfully!')
-    closeDetails()
-    fetchRequests()
+    // Call the store function to update Supabase
+    const success = await requestStore.approveRequest(selectedReq.value.id, role, approverName)
+
+    if (success) {
+      alert('Request Approved Successfully!')
+      closeDetails()
+      // Refresh list using the Department filter
+      requestStore.fetchPendingApprovals(role, dept)
+    }
   } catch (error) {
     console.error(error)
     alert('Failed to update database.')
@@ -66,29 +62,25 @@ const confirmApprove = async () => {
   }
 }
 
-// 5. REJECT ACTION
+// 4. REJECT LOGIC
 const confirmReject = async () => {
   if (!selectedReq.value) return
 
   if (!rejectionReason.value.trim()) {
-    alert('Please provide a reason for rejecting this request.')
+    alert('Please provide a reason for rejection.')
     return
   }
 
   isLoading.value = true
   try {
-    await axios.patch(`http://localhost:3000/requests/${selectedReq.value.id}`, {
-      status: 'Rejected',
-      approver: `${store.user.firstname} ${store.user.lastname}`,
-      approverID: store.user.id,
-      approverDepartment: store.user.department,
-      dateApproved: new Date().toISOString().split('T')[0],
-      remarks: rejectionReason.value,
-    })
+    const success = await requestStore.rejectRequest(selectedReq.value.id, rejectionReason.value)
 
-    alert('Request Rejected.')
-    closeDetails()
-    fetchRequests()
+    if (success) {
+      alert('Request Rejected.')
+      closeDetails()
+      // Refresh list using the Department filter
+      requestStore.fetchPendingApprovals(store.user.role, store.user.department)
+    }
   } catch (error) {
     console.error(error)
     alert('Failed to update database.')
@@ -96,15 +88,18 @@ const confirmReject = async () => {
     isLoading.value = false
   }
 }
-
-onMounted(() => {
-  fetchRequests()
-})
 </script>
 
 <template>
   <div class="page-content">
-    <h1>For Approval</h1>
+    <div class="header-row">
+      <button
+        @click="requestStore.fetchPendingApprovals(store.user?.role, store.user?.department)"
+        class="btn-refresh"
+      >
+        ↻ Refresh List
+      </button>
+    </div>
 
     <div class="card">
       <table>
@@ -113,16 +108,22 @@ onMounted(() => {
             <th>Ref No.</th>
             <th>Purpose</th>
             <th>Submitted By</th>
-            <th>Total</th>
+            <th>Total Amount</th>
             <th>Action</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="req in pendingRequests" :key="req.id">
+          <tr v-for="req in requestStore.requests" :key="req.id">
             <td class="mono-text">{{ req.id }}</td>
             <td>{{ req.purpose }}</td>
-            <td>{{ req.submittedBy }}</td>
-            <td class="fw-bold">{{ req.grandTotal }}</td>
+            <td>
+              <span class="fw-bold">{{ req.submitted_by_name }}</span>
+              <br />
+              <span class="small-text">{{ req.department }}</span>
+            </td>
+            <td class="fw-bold">
+              ₱{{ req.grand_total?.toLocaleString(undefined, { minimumFractionDigits: 2 }) }}
+            </td>
             <td>
               <button @click="openDetails(req)" class="btn-view">👁 View Details</button>
             </td>
@@ -130,8 +131,8 @@ onMounted(() => {
         </tbody>
       </table>
 
-      <div v-if="pendingRequests.length === 0" class="empty-state">
-        <p>✅ All caught up! No pending requests.</p>
+      <div v-if="requestStore.requests.length === 0" class="empty-state">
+        <p>✅ All caught up! No pending requests found for {{ store.user?.department }}.</p>
       </div>
     </div>
 
@@ -149,15 +150,23 @@ onMounted(() => {
             </div>
             <div class="detail-item">
               <label>Date Requested</label>
-              <p>{{ selectedReq.dateRequested }}</p>
+              <p>{{ new Date(selectedReq.created_at).toLocaleDateString() }}</p>
             </div>
             <div class="detail-item">
               <label>Venue</label>
-              <p>{{ selectedReq.venue }}</p>
+              <p>{{ selectedReq.venue || 'N/A' }}</p>
+            </div>
+            <div class="detail-item">
+              <label>Participants</label>
+              <p>{{ selectedReq.participants || 'N/A' }}</p>
             </div>
             <div class="detail-item">
               <label>Submitted By</label>
-              <p>{{ selectedReq.submittedBy }}</p>
+              <p>{{ selectedReq.submitted_by_name }}</p>
+            </div>
+            <div class="detail-item">
+              <label>Department</label>
+              <p>{{ selectedReq.department }}</p>
             </div>
           </div>
 
@@ -176,21 +185,25 @@ onMounted(() => {
                 <td>{{ item.particulars }}</td>
                 <td>{{ item.amount }}</td>
                 <td>{{ item.quantity }}</td>
-                <td>{{ item.total }}</td>
+                <td>{{ item.total?.toLocaleString() }}</td>
               </tr>
             </tbody>
             <tfoot>
               <tr>
                 <td colspan="3" style="text-align: right; font-weight: bold">GRAND TOTAL:</td>
-                <td style="font-weight: bold; color: green">{{ selectedReq.grandTotal }}</td>
+                <td style="font-weight: bold; color: #27ae60">
+                  ₱{{
+                    selectedReq.grand_total?.toLocaleString(undefined, { minimumFractionDigits: 2 })
+                  }}
+                </td>
               </tr>
             </tfoot>
           </table>
 
           <div class="approver-section">
-            <label>This request will be processed by:</label>
+            <label>You are approving as:</label>
             <div class="approver-box">
-              <span class="app-name">{{ store.user?.firstname }} {{ store.user?.lastname }}</span>
+              <span class="app-name">{{ store.user?.first_name }} {{ store.user?.last_name }}</span>
               <span class="app-dept">{{ store.user?.department }} ({{ store.user?.role }})</span>
             </div>
           </div>
@@ -200,7 +213,6 @@ onMounted(() => {
             <textarea
               v-model="rejectionReason"
               class="reject-textarea"
-              rows="2"
               placeholder="e.g. Budget exceeded, Duplicate request..."
             ></textarea>
           </div>
@@ -221,3 +233,31 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Structural layout only - Design is in assets/approvals.css */
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.btn-refresh {
+  background: white;
+  border: 1px solid #ccc;
+  padding: 8px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  color: #555;
+  font-weight: bold;
+}
+.btn-refresh:hover {
+  background: #f1f1f1;
+}
+
+.small-text {
+  font-size: 0.85rem;
+  color: #666;
+}
+</style>

@@ -1,43 +1,55 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import axios from 'axios'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useAuthStore } from '../stores/auth'
+import { useRequestStore } from '../stores/requests'
 import '@/assets/dashboard.css'
-import '@/assets/approvals.css' // Reusing modal and table styles
+import '@/assets/approvals.css'
 
-const requests = ref([])
+const authStore = useAuthStore()
+const requestStore = useRequestStore()
+
 const filterStatus = ref('All')
-const isLoading = ref(false)
 
 // --- MODAL STATE ---
 const showModal = ref(false)
 const selectedReq = ref(null)
 
 // --- 1. FETCH DATA ---
-const fetchHistory = async () => {
-  isLoading.value = true
-  try {
-    const res = await axios.get('http://localhost:3000/requests')
-    requests.value = res.data
-  } catch (error) {
-    console.error('Error loading history:', error)
-  } finally {
-    isLoading.value = false
+const loadData = async () => {
+  // Pass the entire user object so the store can filter by Role
+  if (authStore.user?.role) {
+    await requestStore.fetchUserHistory(authStore.user)
   }
 }
 
-// --- 2. FILTER & SORT ---
-const filteredRequests = computed(() => {
-  const sorted = [...requests.value].sort((a, b) => {
-    const dateA = new Date(a.dateRequested || 0)
-    const dateB = new Date(b.dateRequested || 0)
-    return dateB - dateA
-  })
+// --- 2. TIMING WATCHER ---
+// Ensures data loads as soon as the profile is retrieved from Supabase
+watch(
+  () => authStore.user,
+  (newUser) => {
+    if (newUser?.role) {
+      loadData()
+    }
+  },
+  { deep: true },
+)
 
-  if (filterStatus.value === 'All') return sorted
-  return sorted.filter((req) => req.status === filterStatus.value)
+// --- 3. FILTER & SORT LOGIC ---
+const filteredRequests = computed(() => {
+  let data = [...requestStore.requests]
+
+  if (filterStatus.value !== 'All') {
+    if (filterStatus.value === 'Approved') {
+      // Includes all successful approval steps and final release
+      data = data.filter((req) => req.status.includes('Approved') || req.status === 'Released')
+    } else {
+      data = data.filter((req) => req.status === filterStatus.value)
+    }
+  }
+  return data
 })
 
-// --- 3. MODAL LOGIC ---
+// --- 4. MODAL LOGIC ---
 const openDetails = (req) => {
   selectedReq.value = req
   showModal.value = true
@@ -48,23 +60,17 @@ const closeDetails = () => {
   selectedReq.value = null
 }
 
-// --- 4. FORMATTERS ---
+// --- 5. FORMATTERS ---
 const getStatusClass = (status) => {
-  switch (status) {
-    case 'Approved':
-      return 'badge-success'
-    case 'Rejected':
-      return 'badge-danger'
-    case 'Pending':
-      return 'badge-warning'
-    default:
-      return 'badge-secondary'
-  }
+  if (status.includes('Approved') || status === 'Released') return 'badge-success'
+  if (status === 'Rejected') return 'badge-danger'
+  if (status === 'Pending') return 'badge-warning'
+  return 'badge-secondary'
 }
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('en-US', {
+  return new Date(dateStr).toLocaleDateString('en-PH', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -72,13 +78,14 @@ const formatDate = (dateStr) => {
 }
 
 const formatMoney = (val) => {
-  const num = typeof val === 'string' ? parseFloat(val.replace(/,/g, '')) : val
-  if (isNaN(num)) return val
-  return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(num)
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+  }).format(val || 0)
 }
 
 onMounted(() => {
-  fetchHistory()
+  loadData()
 })
 </script>
 
@@ -100,7 +107,7 @@ onMounted(() => {
     </div>
 
     <div class="card">
-      <div v-if="isLoading" class="loading-state">Loading records...</div>
+      <div v-if="requestStore.loading" class="loading-state">Fetching history...</div>
 
       <table v-else>
         <thead>
@@ -120,13 +127,13 @@ onMounted(() => {
             @click="openDetails(req)"
             class="clickable-row"
           >
-            <td class="text-gray">{{ formatDate(req.dateRequested) }}</td>
+            <td class="text-gray">{{ formatDate(req.created_at) }}</td>
             <td class="mono-text">{{ req.id }}</td>
             <td>{{ req.purpose }}</td>
             <td>
-              <span class="dept-tag">{{ req.department || 'Gen' }}</span>
+              <span class="dept-tag">{{ req.department }}</span>
             </td>
-            <td class="fw-bold">{{ formatMoney(req.grandTotal) }}</td>
+            <td class="fw-bold">{{ formatMoney(req.grand_total) }}</td>
             <td>
               <span :class="['status-badge', getStatusClass(req.status)]">
                 {{ req.status }}
@@ -136,7 +143,7 @@ onMounted(() => {
         </tbody>
       </table>
 
-      <div v-if="filteredRequests.length === 0 && !isLoading" class="empty-state">
+      <div v-if="filteredRequests.length === 0 && !requestStore.loading" class="empty-state">
         <p>
           No records found for "<strong>{{ filterStatus }}</strong
           >".
@@ -147,38 +154,38 @@ onMounted(() => {
     <div v-if="showModal" class="modal-overlay" @click.self="closeDetails">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Request Details: {{ selectedReq.id }}</h3>
+          <h3>Request Review: {{ selectedReq.id }}</h3>
         </div>
 
         <div class="modal-body">
           <div class="details-grid">
             <div class="detail-item">
-              <label>Status</label>
+              <label>Current Status</label>
               <span :class="['status-badge', getStatusClass(selectedReq.status)]">
                 {{ selectedReq.status }}
               </span>
             </div>
             <div class="detail-item">
-              <label>Date Requested</label>
-              <p>{{ formatDate(selectedReq.dateRequested) }}</p>
+              <label>Date Submitted</label>
+              <p>{{ formatDate(selectedReq.created_at) }}</p>
             </div>
             <div class="detail-item">
-              <label>Purpose</label>
-              <p>{{ selectedReq.purpose }}</p>
+              <label>Requester</label>
+              <p>{{ selectedReq.submitted_by_name }}</p>
             </div>
             <div class="detail-item">
               <label>Department</label>
-              <p>{{ selectedReq.department }} ({{ selectedReq.submittedBy }})</p>
+              <p>{{ selectedReq.department }}</p>
             </div>
           </div>
 
-          <h4 class="mt-4 mb-2 font-bold text-gray-700">Items Breakdown</h4>
+          <h4 class="mt-4 mb-2 font-bold">Items Breakdown</h4>
           <table class="mini-table">
             <thead>
               <tr>
                 <th>Particulars</th>
                 <th>Qty</th>
-                <th>Unit Price</th>
+                <th>Price</th>
                 <th>Total</th>
               </tr>
             </thead>
@@ -186,46 +193,46 @@ onMounted(() => {
               <tr v-for="(item, i) in selectedReq.items" :key="i">
                 <td>{{ item.particulars }}</td>
                 <td>{{ item.quantity }}</td>
-                <td>{{ item.amount }}</td>
-                <td>{{ item.total }}</td>
+                <td>{{ formatMoney(item.amount) }}</td>
+                <td>{{ formatMoney(item.total) }}</td>
               </tr>
             </tbody>
             <tfoot>
               <tr>
                 <td colspan="3" class="text-right font-bold">GRAND TOTAL:</td>
-                <td class="font-bold text-green-600">{{ formatMoney(selectedReq.grandTotal) }}</td>
+                <td class="font-bold text-green-600">{{ formatMoney(selectedReq.grand_total) }}</td>
               </tr>
             </tfoot>
           </table>
 
           <div class="audit-section mt-6 p-4 bg-gray-50 border rounded-lg">
-            <h5 class="text-xs font-bold text-gray-500 uppercase mb-2">Audit Trail</h5>
+            <h5 class="text-xs font-bold text-gray-500 uppercase mb-2">Workflow Progress</h5>
+            <div class="audit-trail-content">
+              <div class="audit-row" :class="{ completed: selectedReq.dean_approver }">
+                <p class="text-sm">
+                  <span class="font-bold">1. Dean:</span>
+                  {{ selectedReq.dean_approver ? '✓ Approved' : '○ Pending' }}
+                </p>
+              </div>
 
-            <div v-if="selectedReq.status === 'Approved'">
-              <p class="text-sm">
-                <span class="font-bold text-green-700">✓ Approved By:</span>
-                {{ selectedReq.approver || 'System Admin' }}
-              </p>
-              <p class="text-xs text-gray-500">Date: {{ formatDate(selectedReq.dateApproved) }}</p>
-            </div>
+              <div class="audit-row mt-2" :class="{ completed: selectedReq.accounting_approver }">
+                <p class="text-sm">
+                  <span class="font-bold">2. Accounting:</span>
+                  {{ selectedReq.accounting_approver ? '✓ Verified' : '○ Pending' }}
+                </p>
+              </div>
 
-            <div v-else-if="selectedReq.status === 'Rejected'">
-              <p class="text-sm">
-                <span class="font-bold text-red-700">✕ Rejected By:</span>
-                {{ selectedReq.approver || 'System Admin' }}
-              </p>
-              <p class="text-sm mt-1">
-                <span class="font-bold text-gray-700">Reason:</span>
-                <span class="italic text-red-600"
-                  >"{{ selectedReq.remarks || 'No remarks provided.' }}"</span
-                >
-              </p>
-            </div>
+              <div class="audit-row mt-2" :class="{ completed: selectedReq.admin_approver }">
+                <p class="text-sm">
+                  <span class="font-bold">3. Admin:</span>
+                  {{ selectedReq.admin_approver ? '✓ Released' : '○ Pending' }}
+                </p>
+              </div>
 
-            <div v-else>
-              <p class="text-sm text-yellow-700 italic">
-                This request is currently pending approval.
-              </p>
+              <div v-if="selectedReq.status === 'Rejected'" class="reject-box mt-4">
+                <p class="text-sm font-bold text-red-700">✕ REJECTED</p>
+                <p class="text-sm italic">Reason: {{ selectedReq.rejection_reason }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -237,3 +244,19 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.audit-trail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.audit-row.completed p {
+  color: #15803d;
+}
+.reject-box {
+  background-color: #fef2f2;
+  border-left: 4px solid #ef4444;
+  padding: 10px;
+}
+</style>

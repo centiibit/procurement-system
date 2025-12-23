@@ -1,5 +1,6 @@
 <script setup>
 import { useAuthStore } from '../stores/auth'
+
 const store = useAuthStore()
 </script>
 
@@ -8,7 +9,10 @@ const store = useAuthStore()
     <div class="card">
       <h2>System Status</h2>
       <p>
-        Welcome back, <strong>{{ store.user?.firstname }} {{ store.user?.lastname }}</strong
+        Welcome back,
+        <strong>
+          {{ store.user?.firstname || store.user?.first_name || 'User' }}
+          {{ store.user?.lastname || store.user?.last_name || '' }} </strong
         >.
       </p>
     </div>
