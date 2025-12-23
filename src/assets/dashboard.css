@@ -1,0 +1,225 @@
+/* src/assets/dashboard.css */
+
+/* --- 1. GLOBAL LAYOUT --- */
+.dashboard-layout {
+  display: flex;
+  width: 100vw; /* Exactly 100% of viewport width */
+  height: 100vh; /* Exactly 100% of viewport height */
+  overflow: hidden; /* Prevents double scrollbars */
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f3f4f6; /* Light grey background for main area */
+}
+
+/* --- 2. SIDEBAR DESIGN (Dark Theme) --- */
+.sidebar {
+  width: 280px;
+  background-color: #1e293b; /* Dark Slate Blue */
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  padding: 25px;
+  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  transition: transform 0.3s ease-in-out;
+  flex-shrink: 0;
+}
+
+/* BRAND HEADER */
+.brand {
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.brand h2 {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.header-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.brand .badge {
+  background-color: #3b82f6; /* Bright Blue Badge */
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  font-weight: bold;
+  margin-top: 5px;
+  display: inline-block;
+}
+
+/* MENU LINKS */
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.menu-label {
+  font-size: 0.75rem;
+  color: #94a3b8; /* Muted text */
+  font-weight: bold;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 15px;
+  border-radius: 8px;
+  color: #cbd5e1; /* Light Text */
+  text-decoration: none;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.nav-item:hover {
+  background-color: #334155;
+  color: #ffffff;
+  transform: translateX(5px);
+}
+
+/* ACTIVE STATE (The Blue Highlight) */
+.nav-item.active {
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+/* FOOTER */
+.sidebar-footer {
+  padding-top: 20px;
+  border-top: 1px solid #334155;
+}
+
+.logout-btn {
+  width: 100%;
+  background-color: #ef4444; /* Red */
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.logout-btn:hover {
+  background-color: #dc2626;
+}
+
+/* --- 3. MAIN CONTENT AREA --- */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+header {
+  background-color: white;
+  padding: 20px 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-info strong {
+  color: #1e293b;
+}
+
+/* HIDE HAMBURGER ON DESKTOP */
+.menu-btn {
+  display: none; /* <--- This ensures it is invisible on PC */
+}
+
+/* HIDE CLOSE BUTTON ON DESKTOP */
+.close-btn {
+  display: none;
+}
+
+/* PAGE CONTENT SCROLL AREA */
+.page-content {
+  padding: 30px;
+  overflow-y: auto; /* Scrollbar lives here */
+  flex: 1;
+}
+
+/* Card Style */
+.card {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border: 1px solid #f1f5f9;
+}
+
+/* --- 4. MOBILE RESPONSIVENESS (Phones Only) --- */
+@media (max-width: 768px) {
+  /* Show buttons on mobile */
+  .menu-btn {
+    display: block;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #1e293b;
+  }
+
+  .close-btn {
+    display: block;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    cursor: pointer;
+    position: absolute;
+    right: 0;
+  }
+
+  /* Sidebar becomes a drawer */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    transform: translateX(-100%); /* Hide sidebar */
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  } /* Show sidebar */
+
+  .sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9;
+    display: none;
+  }
+  .sidebar-overlay.active {
+    display: block;
+  }
+}

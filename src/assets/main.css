@@ -1,0 +1,25 @@
+/* src/assets/main.css */
+
+/* 1. Remove default browser gaps */
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* Stop the main window from scrolling */
+}
+
+/* 2. Ensure padding doesn't make boxes bigger than they should be */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* 3. Base Font */
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f4f6f9;
+}

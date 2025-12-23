@@ -1,0 +1,149 @@
+/* src/assets/user-management.css */
+
+/* Form Layout */
+.form-card {
+  margin-bottom: 30px;
+  border-top: 4px solid #3498db; /* Blue accent on top */
+}
+
+.card-header {
+  margin-bottom: 15px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.card-header h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+/* Grid System for Inputs */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* 2 Columns */
+  gap: 15px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.input-group label {
+  font-size: 0.85rem;
+  font-weight: bold;
+  margin-bottom: 5px;
+  color: #555;
+}
+
+.input-group input,
+.input-group select {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  transition: border-color 0.3s;
+}
+
+.input-group input:focus,
+.input-group select:focus {
+  border-color: #3498db;
+  outline: none;
+}
+
+/* Full width span for Wallet and Button */
+.full-width {
+  grid-column: span 2;
+}
+
+/* Buttons */
+.btn-add {
+  background: #27ae60;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 10px;
+  width: 100%;
+  transition: background 0.3s;
+}
+
+.btn-add:hover {
+  background: #2ecc71;
+}
+
+.btn-del {
+  color: #e74c3c;
+  background: none;
+  border: 1px solid #e74c3c;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.btn-del:hover {
+  background: #e74c3c;
+  color: white;
+}
+
+/* Table Styles */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+th {
+  background: #f8f9fa;
+  color: #666;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Text Utilities */
+.fw-bold {
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.mono {
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #555;
+}
+
+.small-text {
+  font-size: 0.85rem;
+}
+
+/* Role Badges */
+.badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.admin {
+  background: #fadbd8;
+  color: #c0392b;
+}
+.approver {
+  background: #d4e6f1;
+  color: #2980b9;
+}
+.staff {
+  background: #d5f5e3;
+  color: #27ae60;
+}

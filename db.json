@@ -1,0 +1,97 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "firstname": "Mark Vincent",
+      "lastname": "Villegas",
+      "department": "Admin",
+      "role": "Admin",
+      "walletAddress": "0xD836e3FF9399F7dDa6Bf8F7ab6a9f5C9eb7F45B0",
+      "username": "admin",
+      "password": "123"
+    },
+    {
+      "id": "1763982530636",
+      "firstname": "Juan",
+      "lastname": "Dela Cruz",
+      "department": "CSIT",
+      "role": "Faculty",
+      "walletAddress": "0x00340Dbc1265Bc1951b2D697993Fe61825eEed90",
+      "username": "a",
+      "password": "a"
+    }
+  ],
+  "requests": [
+    {
+      "id": "25-00001",
+      "referenceNo": "25-00001",
+      "purpose": "IT Lab Upgrade",
+      "dateRequested": "2025-11-25",
+      "venue": "Com Lab A",
+      "participants": "CCSIT",
+      "submittedBy": "Mark Vincent Villegas",
+      "department": "Admin",
+      "items": [
+        {
+          "particulars": "Monitor",
+          "amount": 4500,
+          "quantity": 3,
+          "total": 13500
+        },
+        {
+          "particulars": "Keyboard",
+          "amount": 350,
+          "quantity": 3,
+          "total": 1050
+        },
+        {
+          "particulars": "Mouse",
+          "amount": 200,
+          "quantity": 3,
+          "total": 600
+        }
+      ],
+      "grandTotal": 15150,
+      "status": "Pending",
+      "approver": null,
+      "walletAddress": "0xD836e3FF9399F7dDa6Bf8F7ab6a9f5C9eb7F45B0"
+    },
+    {
+      "id": "25-00002",
+      "referenceNo": "25-00002",
+      "purpose": "4th Year Thesis Defense",
+      "dateRequested": "2025-11-25",
+      "venue": "IT Lab A",
+      "participants": "4th Year CSIT and CSIT Faculty Panelist",
+      "submittedBy": "Juan Dela Cruz",
+      "department": "CSIT",
+      "items": [
+        {
+          "particulars": "Snacks (Packed Lunch)",
+          "amount": 500,
+          "quantity": 4,
+          "total": 2000
+        },
+        {
+          "particulars": "Bottled Water",
+          "amount": 25,
+          "quantity": 4,
+          "total": 100
+        },
+        {
+          "particulars": "Token for Panelist",
+          "amount": 1500,
+          "quantity": 4,
+          "total": 6000
+        }
+      ],
+      "grandTotal": 8100,
+      "status": "Approved",
+      "approver": "Mark Vincent Villegas",
+      "walletAddress": "0x00340Dbc1265Bc1951b2D697993Fe61825eEed90",
+      "approverID": "1",
+      "approverDepartment": "Admin",
+      "dateApproved": "2025-11-26"
+    }
+  ]
+}
