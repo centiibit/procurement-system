@@ -22,7 +22,6 @@ const departments = ['All Departments', 'CSIT', 'CBEA', 'CTHM']
 // --- 1. FETCH DATA ---
 const loadData = async () => {
   if (authStore.user?.role) {
-    // Pass the entire user object to handle role-based logic in the store
     await requestStore.fetchUserHistory(authStore.user)
   }
 }
@@ -42,7 +41,6 @@ watch(
 const filteredRequests = computed(() => {
   let data = [...requestStore.requests]
 
-  // A. Filter by Status
   if (filterStatus.value !== 'All') {
     if (filterStatus.value === 'Approved') {
       data = data.filter((req) => req.status.includes('Approved') || req.status === 'Released')
@@ -51,12 +49,10 @@ const filteredRequests = computed(() => {
     }
   }
 
-  // B. Filter by Department (Only for Admin/Accounting)
   if (selectedDept.value !== 'All Departments') {
     data = data.filter((req) => req.department === selectedDept.value)
   }
 
-  // C. Filter by Search Query (ID or Requester Name)
   if (searchQuery.value.trim() !== '') {
     const query = searchQuery.value.toLowerCase()
     data = data.filter(
@@ -211,6 +207,14 @@ onMounted(() => {
               <label>Department</label>
               <p>{{ selectedReq.department }}</p>
             </div>
+            <div class="detail-item">
+              <label>Original Request</label>
+              <p class="text-gray">{{ formatMoney(selectedReq.original_total) }}</p>
+            </div>
+            <div class="detail-item">
+              <label>Final Approved</label>
+              <p class="text-success fw-bold">{{ formatMoney(selectedReq.grand_total) }}</p>
+            </div>
           </div>
 
           <h4 class="mt-4 mb-2 font-bold">Items Breakdown</h4>
@@ -233,7 +237,7 @@ onMounted(() => {
             </tbody>
             <tfoot>
               <tr>
-                <td colspan="3" class="text-right font-bold">GRAND TOTAL:</td>
+                <td colspan="3" class="text-right font-bold">TOTAL RELEASED:</td>
                 <td class="font-bold text-green-600">{{ formatMoney(selectedReq.grand_total) }}</td>
               </tr>
             </tfoot>
@@ -312,5 +316,16 @@ onMounted(() => {
   background-color: #fef2f2;
   border-left: 4px solid #ef4444;
   padding: 10px;
+}
+
+/* PATCH: Added specific comparison styles */
+.text-gray {
+  color: #64748b;
+}
+.text-success {
+  color: #10b981;
+}
+.fw-bold {
+  font-weight: bold;
 }
 </style>

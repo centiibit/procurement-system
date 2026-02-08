@@ -1,8 +1,7 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRequestStore } from '../stores/requests'
-// Importing your CSS files
 import '@/assets/dashboard.css'
 import '@/assets/approvals.css'
 
@@ -15,17 +14,49 @@ const selectedReq = ref(null)
 const rejectionReason = ref('')
 const isLoading = ref(false)
 
-// 1. FETCH DATA ON LOAD
+// --- 1. BUDGET ADJUSTMENT LOGIC ---
+
+// Calculate the NEW Grand Total based on current input values
+const calculatedGrandTotal = computed(() => {
+  if (!selectedReq.value || !selectedReq.value.items) return 0
+  return selectedReq.value.items.reduce((sum, item) => {
+    // Update individual row total reactive to inputs
+    item.total = (item.quantity || 0) * (item.amount || 0)
+    return sum + item.total
+  }, 0)
+})
+
+// Find the original amount from the store's list for comparison
+const originalGrandTotal = computed(() => {
+  const original = requestStore.requests.find((r) => r.id === selectedReq.value?.id)
+  return original ? original.grand_total : 0
+})
+
+// Calculate the difference between Original and Adjusted
+const budgetVariance = computed(() => {
+  return calculatedGrandTotal.value - originalGrandTotal.value
+})
+
+// UI Helper for variance colors
+const getVarianceClass = (val) => {
+  if (val < 0) return 'text-danger' // Savings
+  if (val > 0) return 'text-warning' // Increase
+  return 'text-gray'
+}
+
+// --- 2. DATA FETCHING ---
+
 onMounted(() => {
   if (store.user?.role) {
-    // UPDATED: Now passing (Role, Department) so Deans only see their specific department
     requestStore.fetchPendingApprovals(store.user.role, store.user.department)
   }
 })
 
-// 2. MODAL CONTROLS
+// --- 3. MODAL CONTROLS ---
+
 const openDetails = (req) => {
-  selectedReq.value = req
+  // Deep clone to allow "what-if" adjustments without affecting the background list
+  selectedReq.value = JSON.parse(JSON.stringify(req))
   showModal.value = true
 }
 
@@ -35,7 +66,8 @@ const closeDetails = () => {
   rejectionReason.value = ''
 }
 
-// 3. APPROVE LOGIC
+// --- 4. APPROVE & REJECT LOGIC ---
+
 const confirmApprove = async () => {
   if (!selectedReq.value) return
 
@@ -45,13 +77,15 @@ const confirmApprove = async () => {
     const dept = store.user.department
     const approverName = `${store.user.first_name} ${store.user.last_name}`
 
-    // Call the store function to update Supabase
-    const success = await requestStore.approveRequest(selectedReq.value.id, role, approverName)
+    // Pass the adjusted items and the new total to the store
+    const success = await requestStore.approveRequest(selectedReq.value.id, role, approverName, {
+      items: selectedReq.value.items,
+      grand_total: calculatedGrandTotal.value,
+    })
 
     if (success) {
-      alert('Request Approved Successfully!')
+      alert('Request Approved with Adjustments!')
       closeDetails()
-      // Refresh list using the Department filter
       requestStore.fetchPendingApprovals(role, dept)
     }
   } catch (error) {
@@ -62,11 +96,8 @@ const confirmApprove = async () => {
   }
 }
 
-// 4. REJECT LOGIC
 const confirmReject = async () => {
-  if (!selectedReq.value) return
-
-  if (!rejectionReason.value.trim()) {
+  if (!selectedReq.value || !rejectionReason.value.trim()) {
     alert('Please provide a reason for rejection.')
     return
   }
@@ -74,11 +105,9 @@ const confirmReject = async () => {
   isLoading.value = true
   try {
     const success = await requestStore.rejectRequest(selectedReq.value.id, rejectionReason.value)
-
     if (success) {
       alert('Request Rejected.')
       closeDetails()
-      // Refresh list using the Department filter
       requestStore.fetchPendingApprovals(store.user.role, store.user.department)
     }
   } catch (error) {
@@ -108,7 +137,7 @@ const confirmReject = async () => {
             <th>Ref No.</th>
             <th>Purpose</th>
             <th>Submitted By</th>
-            <th>Total Amount</th>
+            <th>Original Amount</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -117,116 +146,118 @@ const confirmReject = async () => {
             <td class="mono-text">{{ req.id }}</td>
             <td>{{ req.purpose }}</td>
             <td>
-              <span class="fw-bold">{{ req.submitted_by_name }}</span>
-              <br />
+              <span class="fw-bold">{{ req.submitted_by_name }}</span
+              ><br />
               <span class="small-text">{{ req.department }}</span>
             </td>
             <td class="fw-bold">
               ₱{{ req.grand_total?.toLocaleString(undefined, { minimumFractionDigits: 2 }) }}
             </td>
             <td>
-              <button @click="openDetails(req)" class="btn-view">👁 View Details</button>
+              <button @click="openDetails(req)" class="btn-view">👁 Review & Adjust</button>
             </td>
           </tr>
         </tbody>
       </table>
 
       <div v-if="requestStore.requests.length === 0" class="empty-state">
-        <p>✅ All caught up! No pending requests found for {{ store.user?.department }}.</p>
+        <p>✅ No pending requests found for {{ store.user?.department }}.</p>
       </div>
     </div>
 
     <div v-if="showModal" class="modal-overlay" @click.self="closeDetails">
-      <div class="modal-content">
+      <div class="modal-content modal-large">
         <div class="modal-header">
-          <h3>Review Request: {{ selectedReq.id }}</h3>
+          <h3>Budget Review: {{ selectedReq.id }}</h3>
         </div>
 
         <div class="modal-body">
+          <div class="budget-comparison-bar">
+            <div class="summary-item">
+              <label>Original</label>
+              <span
+                >₱{{
+                  originalGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })
+                }}</span
+              >
+            </div>
+            <div class="summary-item">
+              <label>Adjusted</label>
+              <span class="text-success"
+                >₱{{
+                  calculatedGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })
+                }}</span
+              >
+            </div>
+            <div class="summary-item">
+              <label>Variance</label>
+              <span :class="getVarianceClass(budgetVariance)">
+                {{ budgetVariance > 0 ? '+' : '' }}₱{{
+                  budgetVariance.toLocaleString(undefined, { minimumFractionDigits: 2 })
+                }}
+              </span>
+            </div>
+          </div>
+
           <div class="details-grid">
             <div class="detail-item">
               <label>Purpose</label>
               <p>{{ selectedReq.purpose }}</p>
             </div>
             <div class="detail-item">
-              <label>Date Requested</label>
-              <p>{{ new Date(selectedReq.created_at).toLocaleDateString() }}</p>
-            </div>
-            <div class="detail-item">
-              <label>Venue</label>
-              <p>{{ selectedReq.venue || 'N/A' }}</p>
-            </div>
-            <div class="detail-item">
-              <label>Participants</label>
-              <p>{{ selectedReq.participants || 'N/A' }}</p>
-            </div>
-            <div class="detail-item">
-              <label>Submitted By</label>
+              <label>Requester</label>
               <p>{{ selectedReq.submitted_by_name }}</p>
-            </div>
-            <div class="detail-item">
-              <label>Department</label>
-              <p>{{ selectedReq.department }}</p>
             </div>
           </div>
 
-          <h4>Items Breakdown</h4>
-          <table class="mini-table">
+          <h4 class="mt-4">Line Items Adjustment</h4>
+          <table class="mini-table editable-table">
             <thead>
               <tr>
                 <th>Particulars</th>
-                <th>Amount</th>
-                <th>Qty</th>
-                <th>Total</th>
+                <th width="120">Unit Price</th>
+                <th width="100">Qty</th>
+                <th width="120" class="text-right">Total</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(item, i) in selectedReq.items" :key="i">
                 <td>{{ item.particulars }}</td>
-                <td>{{ item.amount }}</td>
-                <td>{{ item.quantity }}</td>
-                <td>{{ item.total?.toLocaleString() }}</td>
+                <td>
+                  <input type="number" v-model.number="item.amount" class="table-input" />
+                </td>
+                <td>
+                  <input type="number" v-model.number="item.quantity" class="table-input" />
+                </td>
+                <td class="text-right fw-bold">₱{{ item.total?.toLocaleString() }}</td>
               </tr>
             </tbody>
-            <tfoot>
-              <tr>
-                <td colspan="3" style="text-align: right; font-weight: bold">GRAND TOTAL:</td>
-                <td style="font-weight: bold; color: #27ae60">
-                  ₱{{
-                    selectedReq.grand_total?.toLocaleString(undefined, { minimumFractionDigits: 2 })
-                  }}
-                </td>
-              </tr>
-            </tfoot>
           </table>
 
-          <div class="approver-section">
-            <label>You are approving as:</label>
-            <div class="approver-box">
-              <span class="app-name">{{ store.user?.first_name }} {{ store.user?.last_name }}</span>
-              <span class="app-dept">{{ store.user?.department }} ({{ store.user?.role }})</span>
-            </div>
+          <div class="approver-info">
+            <p>
+              Signing as:
+              <strong>{{ store.user?.first_name }} {{ store.user?.last_name }}</strong> ({{
+                store.user?.role
+              }})
+            </p>
           </div>
 
-          <div class="reject-input-section">
-            <label class="reject-label">Rejection Remarks (Required if rejecting):</label>
+          <div class="reject-section">
+            <label>Rejection Remarks (If applicable):</label>
             <textarea
               v-model="rejectionReason"
               class="reject-textarea"
-              placeholder="e.g. Budget exceeded, Duplicate request..."
+              placeholder="State reason for rejection..."
             ></textarea>
           </div>
         </div>
 
         <div class="modal-footer">
           <button @click="closeDetails" class="btn-cancel">Cancel</button>
-
-          <button @click="confirmReject" class="btn-reject" :disabled="isLoading">
-            {{ isLoading ? 'Processing...' : 'Reject' }}
-          </button>
-
+          <button @click="confirmReject" class="btn-reject" :disabled="isLoading">Reject</button>
           <button @click="confirmApprove" class="btn-confirm" :disabled="isLoading">
-            {{ isLoading ? 'Processing...' : 'Approve Request' }}
+            Confirm & Approve
           </button>
         </div>
       </div>
@@ -235,29 +266,71 @@ const confirmReject = async () => {
 </template>
 
 <style scoped>
-/* Structural layout only - Design is in assets/approvals.css */
-.header-row {
+.modal-large {
+  max-width: 850px;
+  width: 95%;
+}
+
+/* Comparison Bar Styles */
+.budget-comparison-bar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  justify-content: space-around;
+  background: #f8fafc;
+  padding: 15px;
+  border-radius: 8px;
   margin-bottom: 20px;
+  border: 1px solid #e2e8f0;
+}
+.summary-item {
+  text-align: center;
+}
+.summary-item label {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+.summary-item span {
+  font-weight: 800;
+  font-size: 1.1rem;
 }
 
-.btn-refresh {
-  background: white;
-  border: 1px solid #ccc;
-  padding: 8px 15px;
-  border-radius: 5px;
-  cursor: pointer;
-  color: #555;
-  font-weight: bold;
+/* Table Input Styles */
+.table-input {
+  width: 100%;
+  padding: 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  text-align: right;
+  font-family: 'Courier New', Courier, monospace;
 }
-.btn-refresh:hover {
-  background: #f1f1f1;
+.table-input:focus {
+  outline: 2px solid #3b82f6;
+  border-color: transparent;
 }
 
-.small-text {
-  font-size: 0.85rem;
-  color: #666;
+.text-success {
+  color: #10b981;
+}
+.text-danger {
+  color: #ef4444;
+}
+.text-warning {
+  color: #f59e0b;
+}
+.text-gray {
+  color: #64748b;
+}
+.text-right {
+  text-align: right;
+}
+
+.approver-info {
+  margin-top: 20px;
+  padding: 10px;
+  background: #eff6ff;
+  border-radius: 4px;
+  font-size: 0.9rem;
 }
 </style>

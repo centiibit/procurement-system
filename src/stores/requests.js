@@ -11,7 +11,14 @@ export const useRequestStore = defineStore('request', () => {
   const createRequest = async (requestData) => {
     loading.value = true
     try {
-      const { data, error: err } = await supabase.from('requests').insert([requestData]).select()
+      // PATCH: Capture the initial total into original_total field
+      const finalPayload = {
+        ...requestData,
+        original_total: requestData.grand_total, // This locks the faculty's starting request amount
+      }
+
+      const { data, error: err } = await supabase.from('requests').insert([finalPayload]).select()
+
       if (err) throw err
       if (data) {
         requests.value.unshift(data[0])
@@ -65,15 +72,11 @@ export const useRequestStore = defineStore('request', () => {
     try {
       let query = supabase.from('requests').select('*').order('created_at', { ascending: false })
 
-      // --- ROLE-BASED SCOPE FILTERING ---
       if (user.role === 'Faculty') {
-        // Faculty: Only see their own personal submissions
         query = query.ilike('submitted_by_name', fullName)
       } else if (user.role === 'Dean') {
-        // Dean: See everything in their specific department
         query = query.eq('department', user.department)
       } else if (user.role === 'Accounting' || user.role === 'Admin' || user.role === 'admin') {
-        // Accounting/Admin: No filters added to see the "Master Log"
         console.log(`Admin/Accounting fetching the complete record history.`)
       }
 
@@ -88,36 +91,35 @@ export const useRequestStore = defineStore('request', () => {
     }
   }
 
-  // 4. APPROVE REQUEST
-  const approveRequest = async (id, role, approverName) => {
+  // 4. APPROVE REQUEST (Supports Budget Adjustments)
+  const approveRequest = async (id, role, approverName, adjustments = null) => {
     try {
       const timestamp = new Date().toISOString()
       let updates = {}
 
+      // If adjustments were made in the UI, update the working total and items
+      if (adjustments) {
+        updates.items = adjustments.items
+        updates.grand_total = adjustments.grand_total
+      }
+
       if (role === 'Dean') {
-        updates = {
-          dean_approver: approverName,
-          dean_approval_date: timestamp,
-          status: 'Approved by Dean',
-        }
+        updates.dean_approver = approverName
+        updates.dean_approval_date = timestamp
+        updates.status = 'Approved by Dean'
       } else if (role === 'Accounting') {
-        updates = {
-          accounting_approver: approverName,
-          accounting_approval_date: timestamp,
-          status: 'Approved by Accounting',
-        }
+        updates.accounting_approver = approverName
+        updates.accounting_approval_date = timestamp
+        updates.status = 'Approved by Accounting'
       } else if (role === 'Admin' || role === 'admin') {
-        updates = {
-          admin_approver: approverName,
-          admin_approval_date: timestamp,
-          status: 'Released',
-        }
+        updates.admin_approver = approverName
+        updates.admin_approval_date = timestamp
+        updates.status = 'Released'
       }
 
       const { error: err } = await supabase.from('requests').update(updates).eq('id', id)
       if (err) throw err
 
-      // Remove from current list view
       requests.value = requests.value.filter((r) => r.id !== id)
       return true
     } catch (err) {
