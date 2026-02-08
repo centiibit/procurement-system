@@ -9,21 +9,25 @@ const authStore = useAuthStore()
 const requestStore = useRequestStore()
 
 const filterStatus = ref('All')
+const selectedDept = ref('All Departments')
+const searchQuery = ref('') // Search state
 
 // --- MODAL STATE ---
 const showModal = ref(false)
 const selectedReq = ref(null)
 
+// List of departments for Admin/Accounting dropdown
+const departments = ['All Departments', 'CSIT', 'CBEA', 'CTHM']
+
 // --- 1. FETCH DATA ---
 const loadData = async () => {
-  // Pass the entire user object so the store can filter by Role
   if (authStore.user?.role) {
+    // Pass the entire user object to handle role-based logic in the store
     await requestStore.fetchUserHistory(authStore.user)
   }
 }
 
 // --- 2. TIMING WATCHER ---
-// Ensures data loads as soon as the profile is retrieved from Supabase
 watch(
   () => authStore.user,
   (newUser) => {
@@ -34,18 +38,33 @@ watch(
   { deep: true },
 )
 
-// --- 3. FILTER & SORT LOGIC ---
+// --- 3. MULTI-LEVEL FILTER & SEARCH LOGIC ---
 const filteredRequests = computed(() => {
   let data = [...requestStore.requests]
 
+  // A. Filter by Status
   if (filterStatus.value !== 'All') {
     if (filterStatus.value === 'Approved') {
-      // Includes all successful approval steps and final release
       data = data.filter((req) => req.status.includes('Approved') || req.status === 'Released')
     } else {
       data = data.filter((req) => req.status === filterStatus.value)
     }
   }
+
+  // B. Filter by Department (Only for Admin/Accounting)
+  if (selectedDept.value !== 'All Departments') {
+    data = data.filter((req) => req.department === selectedDept.value)
+  }
+
+  // C. Filter by Search Query (ID or Requester Name)
+  if (searchQuery.value.trim() !== '') {
+    const query = searchQuery.value.toLowerCase()
+    data = data.filter(
+      (req) =>
+        req.id.toLowerCase().includes(query) || req.submitted_by_name.toLowerCase().includes(query),
+    )
+  }
+
   return data
 })
 
@@ -93,6 +112,24 @@ onMounted(() => {
   <div class="page-content">
     <div class="header-flex">
       <h1>Transaction History</h1>
+
+      <div
+        v-if="authStore.user?.role === 'Accounting' || authStore.user?.role === 'Admin'"
+        class="tools-container"
+      >
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search Ref No. or Name..."
+          class="search-input"
+        />
+
+        <select v-model="selectedDept" class="dept-dropdown">
+          <option v-for="dept in departments" :key="dept" :value="dept">
+            {{ dept }}
+          </option>
+        </select>
+      </div>
     </div>
 
     <div class="filter-tabs">
@@ -144,10 +181,7 @@ onMounted(() => {
       </table>
 
       <div v-if="filteredRequests.length === 0 && !requestStore.loading" class="empty-state">
-        <p>
-          No records found for "<strong>{{ filterStatus }}</strong
-          >".
-        </p>
+        <p>No matching records found.</p>
       </div>
     </div>
 
@@ -210,25 +244,19 @@ onMounted(() => {
             <div class="audit-trail-content">
               <div class="audit-row" :class="{ completed: selectedReq.dean_approver }">
                 <p class="text-sm">
-                  <span class="font-bold">1. Dean:</span>
-                  {{ selectedReq.dean_approver ? '✓ Approved' : '○ Pending' }}
+                  Dean: {{ selectedReq.dean_approver ? '✓ Approved' : '○ Pending' }}
                 </p>
               </div>
-
               <div class="audit-row mt-2" :class="{ completed: selectedReq.accounting_approver }">
                 <p class="text-sm">
-                  <span class="font-bold">2. Accounting:</span>
-                  {{ selectedReq.accounting_approver ? '✓ Verified' : '○ Pending' }}
+                  Accounting: {{ selectedReq.accounting_approver ? '✓ Verified' : '○ Pending' }}
                 </p>
               </div>
-
               <div class="audit-row mt-2" :class="{ completed: selectedReq.admin_approver }">
                 <p class="text-sm">
-                  <span class="font-bold">3. Admin:</span>
-                  {{ selectedReq.admin_approver ? '✓ Released' : '○ Pending' }}
+                  Admin: {{ selectedReq.admin_approver ? '✓ Released' : '○ Pending' }}
                 </p>
               </div>
-
               <div v-if="selectedReq.status === 'Rejected'" class="reject-box mt-4">
                 <p class="text-sm font-bold text-red-700">✕ REJECTED</p>
                 <p class="text-sm italic">Reason: {{ selectedReq.rejection_reason }}</p>
@@ -246,14 +274,40 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.audit-trail-content {
+.header-flex {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 20px;
 }
+
+.tools-container {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.search-input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  width: 250px;
+}
+
+.dept-dropdown {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: white;
+}
+
 .audit-row.completed p {
   color: #15803d;
+  font-weight: 500;
 }
+
 .reject-box {
   background-color: #fef2f2;
   border-left: 4px solid #ef4444;

@@ -12,9 +12,7 @@ export const useRequestStore = defineStore('request', () => {
     loading.value = true
     try {
       const { data, error: err } = await supabase.from('requests').insert([requestData]).select()
-
       if (err) throw err
-
       if (data) {
         requests.value.unshift(data[0])
       }
@@ -27,11 +25,10 @@ export const useRequestStore = defineStore('request', () => {
     }
   }
 
-  // 2. FETCH PENDING APPROVALS (Filter by Role & Dept)
+  // 2. FETCH PENDING APPROVALS
   const fetchPendingApprovals = async (userRole, userDept) => {
     loading.value = true
     requests.value = []
-
     try {
       let query = supabase.from('requests').select('*').order('created_at', { ascending: true })
 
@@ -57,7 +54,6 @@ export const useRequestStore = defineStore('request', () => {
 
   // 3. FETCH HISTORY (Universal for all roles)
   const fetchUserHistory = async (user) => {
-    // Safety check: ensure user data is loaded
     if (!user || !user.role) {
       console.warn('fetchUserHistory: User data not ready yet.')
       return
@@ -67,24 +63,23 @@ export const useRequestStore = defineStore('request', () => {
     const fullName = `${user.first_name} ${user.last_name}`
 
     try {
-      // Base query: Get all requests, latest first
       let query = supabase.from('requests').select('*').order('created_at', { ascending: false })
 
-      // ROLE-BASED LOGIC:
-      // Faculty and Dean see their OWN requests.
-      // Accounting and Admin see ALL requests (Full Transaction History).
-      if (user.role === 'Faculty' || user.role === 'Dean') {
-        console.log(`Fetching personal history for ${user.role}: ${fullName}`)
+      // --- ROLE-BASED SCOPE FILTERING ---
+      if (user.role === 'Faculty') {
+        // Faculty: Only see their own personal submissions
         query = query.ilike('submitted_by_name', fullName)
-      } else {
-        console.log(`Fetching full system history for ${user.role}`)
-        // No filter added, retrieves everything for Accounting/Admin
+      } else if (user.role === 'Dean') {
+        // Dean: See everything in their specific department
+        query = query.eq('department', user.department)
+      } else if (user.role === 'Accounting' || user.role === 'Admin' || user.role === 'admin') {
+        // Accounting/Admin: No filters added to see the "Master Log"
+        console.log(`Admin/Accounting fetching the complete record history.`)
       }
 
       const { data, error: err } = await query
       if (err) throw err
 
-      console.log('Supabase History Results:', data)
       requests.value = data
     } catch (err) {
       console.error('Fetch History Error:', err.message)
@@ -93,7 +88,7 @@ export const useRequestStore = defineStore('request', () => {
     }
   }
 
-  // 4. APPROVE REQUEST (Linear Chain)
+  // 4. APPROVE REQUEST
   const approveRequest = async (id, role, approverName) => {
     try {
       const timestamp = new Date().toISOString()
@@ -122,6 +117,7 @@ export const useRequestStore = defineStore('request', () => {
       const { error: err } = await supabase.from('requests').update(updates).eq('id', id)
       if (err) throw err
 
+      // Remove from current list view
       requests.value = requests.value.filter((r) => r.id !== id)
       return true
     } catch (err) {
