@@ -1,13 +1,13 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
-import { supabase } from '../supabase' // ⚠️ Make sure this matches your file path!
+import { supabase } from '../supabase' // Verified: Matches your file path!
 
 export const useAuthStore = defineStore('auth', () => {
-  // 1. STATE: Load user from localStorage if available
+  // 1. STATE: Persistent session and user list
   const user = ref(JSON.parse(localStorage.getItem('user')) || null)
-  const accounts = ref([]) // Stores the list of users for Admin View
+  const accounts = ref([])
 
-  // 2. LOGIN (Checks 'profiles' table)
+  // 2. LOGIN (Security Update: Blocks disabled accounts)
   async function login(username, password) {
     try {
       const { data, error } = await supabase
@@ -15,16 +15,19 @@ export const useAuthStore = defineStore('auth', () => {
         .select('*')
         .eq('username', username)
         .eq('password', password)
-        .single() // Expect exactly one match
+        .eq('is_active', true) // Only allows active users to log in
+        .single()
 
-      if (error || !data) throw error
+      if (error || !data) {
+        throw new Error('Invalid credentials or account is disabled.')
+      }
 
-      // Success: Update state and localStorage
       user.value = data
       localStorage.setItem('user', JSON.stringify(data))
       return true
     } catch (e) {
       console.error('Login Error:', e.message)
+      alert(e.message)
       return false
     }
   }
@@ -33,38 +36,29 @@ export const useAuthStore = defineStore('auth', () => {
   function logout() {
     user.value = null
     localStorage.removeItem('user')
-    // Optional: If using real Supabase Auth, you would add: await supabase.auth.signOut()
   }
 
-  // 4. GET USERS (Loads the table for Admin)
+  // 4. GET USERS (Loads the admin table)
   async function fetchAccounts() {
     try {
       const { data, error } = await supabase.from('profiles').select('*')
-
       if (error) throw error
-
       accounts.value = data
     } catch (e) {
       console.error('Error fetching users:', e.message)
     }
   }
 
-  // 5. ADD USER (Saves to Supabase)
+  // 5. ADD USER
   async function addAccount(formData) {
     try {
-      // NOTE: We do NOT generate an ID here anymore.
-      // Supabase handles the UUID automatically.
       const { data, error } = await supabase
         .from('profiles')
-        .insert([formData]) // Insert the object directly
+        .insert([{ ...formData, is_active: true }]) // Default to active
         .select()
 
       if (error) throw error
-
-      // Add the new user to our local list immediately
-      if (data) {
-        accounts.value.push(data[0])
-      }
+      if (data) accounts.value.push(data[0])
       return true
     } catch (e) {
       console.error('Error adding user:', e.message)
@@ -72,19 +66,66 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // 6. DELETE USER
-  async function deleteAccount(id) {
+  // 6. UPDATE USER (Fixed: Syncs session if you edit yourself)
+  async function updateAccount(id, updatedData) {
     try {
-      const { error } = await supabase.from('profiles').delete().eq('id', id)
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(updatedData)
+        .eq('id', id)
+        .select()
 
       if (error) throw error
 
-      // Remove from local list so the UI updates instantly
-      accounts.value = accounts.value.filter((u) => u.id !== id)
+      // Update local accounts table
+      const index = accounts.value.findIndex((u) => u.id === id)
+      if (index !== -1 && data) {
+        accounts.value[index] = data[0]
+      }
+
+      // Update current session if the edited user is the logged-in one
+      if (user.value && user.value.id === id && data) {
+        user.value = data[0]
+        localStorage.setItem('user', JSON.stringify(data[0]))
+      }
+      return true
     } catch (e) {
-      console.error('Error deleting user:', e.message)
+      console.error('Error updating user:', e.message)
+      return false
     }
   }
 
-  return { user, accounts, login, logout, fetchAccounts, addAccount, deleteAccount }
+  // 7. TOGGLE STATUS (Replaces Delete for Data Integrity)
+  async function toggleAccountStatus(id, currentStatus) {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ is_active: !currentStatus })
+        .eq('id', id)
+        .select()
+
+      if (error) throw error
+
+      // Reflect change in UI
+      const index = accounts.value.findIndex((u) => u.id === id)
+      if (index !== -1 && data) {
+        accounts.value[index] = data[0]
+      }
+      return true
+    } catch (e) {
+      console.error('Error toggling status:', e.message)
+      return false
+    }
+  }
+
+  return {
+    user,
+    accounts,
+    login,
+    logout,
+    fetchAccounts,
+    addAccount,
+    updateAccount,
+    toggleAccountStatus,
+  }
 })

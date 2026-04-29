@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/auth'
 import { useRequestStore } from '../stores/requests'
 import { useRouter } from 'vue-router'
 import { supabase } from '../supabase'
+import { ethers } from 'ethers'
 import '@/assets/dashboard.css'
 import '@/assets/create-request.css'
 
@@ -23,7 +24,7 @@ const form = ref({
   items: [{ particulars: '', amount: 0, quantity: 1, total: 0 }],
 })
 
-// 2. GENERATE ID (Same as before)
+// 2. GENERATE ID
 onMounted(async () => {
   try {
     const currentYear = new Date().getFullYear().toString().slice(-2)
@@ -54,7 +55,37 @@ onMounted(async () => {
   }
 })
 
-// 3. CALCULATIONS (Same as before)
+// --- 3. FOOLPROOF WALLET CONSISTENCY CHECK ---
+const checkWalletConsistency = async () => {
+  try {
+    if (!window.ethereum) {
+      alert('MetaMask not found! Please install it to continue.')
+      return false
+    }
+
+    const profileWallet = store.user?.wallet_address?.toLowerCase()
+    if (!profileWallet) {
+      alert('Error: No authorized wallet address found in your profile.')
+      return false
+    }
+
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
+    const activeMetaMaskWallet = accounts[0].toLowerCase()
+
+    if (profileWallet !== activeMetaMaskWallet) {
+      alert(
+        `Security Alert!\n\nYou are logged in as ${store.user.first_name},\nPlease switch to your authorized wallet!`,
+      )
+      return false
+    }
+    return true
+  } catch (error) {
+    console.error('Wallet Check Error:', error)
+    return false
+  }
+}
+
+// 4. CALCULATIONS
 const validateAmount = (event) => {
   const charCode = event.which ? event.which : event.keyCode
   if (charCode === 46) return true
@@ -77,54 +108,82 @@ const removeItem = (index) => {
 }
 
 const calculateRow = (item) => {
-  item.total = item.amount * item.quantity
+  item.total = (item.amount || 0) * (item.quantity || 0)
 }
 
 const grandTotal = computed(() => {
   return form.value.items.reduce((acc, item) => acc + item.total, 0)
 })
 
-// 4. SUBMIT ACTION (UPDATED LOGIC)
+const generateRequestHash = async (id, total, purpose, name) => {
+  const dataString = `${id}-${total}-${purpose}-${name}`
+  const msgUint8 = new TextEncoder().encode(dataString)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return '0x' + hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+// 5. SUBMIT ACTION
 const handleSubmit = async () => {
   if (!form.value.purpose) return alert('Please state the purpose.')
   if (grandTotal.value <= 0) return alert('Please add at least one valid item.')
 
-  // --- AUTO-APPROVAL LOGIC FOR DEAN ---
-  const userRole = store.user?.role
-  let initialStatus = 'Pending'
-  let deanApprover = null
-  let deanDate = null
+  try {
+    // A. PERFORM FOOLPROOF WALLET CHECK
+    const isWalletValid = await checkWalletConsistency()
+    if (!isWalletValid) return
 
-  // If the requester IS the Dean, they auto-approve their step.
-  if (userRole === 'Dean' || userRole === 'dean') {
-    initialStatus = 'Approved by Dean'
-    deanApprover = form.value.submittedBy
-    deanDate = new Date().toISOString()
-  }
+    const provider = new ethers.BrowserProvider(window.ethereum)
+    const signer = await provider.getSigner()
 
-  const payload = {
-    id: form.value.referenceNo,
-    submitted_by_name: form.value.submittedBy,
-    purpose: form.value.purpose,
-    venue: form.value.venue,
-    participants: form.value.participants,
-    department: form.value.department,
-    items: form.value.items,
-    grand_total: grandTotal.value,
+    // B. GENERATE UNIQUE HASH
+    const requestHash = await generateRequestHash(
+      form.value.referenceNo,
+      grandTotal.value,
+      form.value.purpose,
+      form.value.submittedBy,
+    )
 
-    // Dynamic Fields based on Role
-    status: initialStatus,
-    dean_approver: deanApprover,
-    dean_approval_date: deanDate,
-  }
+    // C. IDENTITY VERIFICATION SIGNATURE
+    alert('Identity Verification Required: Please sign the request to prove this intent is yours.')
+    const signature = await signer.signMessage(requestHash)
 
-  console.log('Submitting Payload:', payload)
+    // D. DYNAMIC ROLE LOGIC
+    const userRole = store.user?.role?.toLowerCase()
+    let initialStatus = 'Pending'
+    let deanApprover = null
+    let deanDate = null
 
-  const success = await requestStore.createRequest(payload)
+    if (userRole === 'dean') {
+      initialStatus = 'Approved by Dean'
+      deanApprover = form.value.submittedBy
+      deanDate = new Date().toISOString()
+    }
 
-  if (success) {
-    alert(`Request ${form.value.referenceNo} Submitted Successfully!`)
-    router.push('/dashboard')
+    const payload = {
+      id: form.value.referenceNo,
+      submitted_by_name: form.value.submittedBy,
+      purpose: form.value.purpose,
+      venue: form.value.venue,
+      participants: form.value.participants,
+      department: form.value.department,
+      items: form.value.items,
+      grand_total: grandTotal.value,
+      status: initialStatus,
+      dean_approver: deanApprover,
+      dean_approval_date: deanDate,
+      requester_signature: signature,
+    }
+
+    const success = await requestStore.createRequest(payload)
+
+    if (success) {
+      alert(`✅ Request ${form.value.referenceNo} Digitally Signed & Submitted!`)
+      router.push('/dashboard')
+    }
+  } catch (error) {
+    console.error('Submission Error:', error)
+    alert('Submission Cancelled: A digital signature is required for verification.')
   }
 }
 </script>
@@ -147,7 +206,7 @@ const handleSubmit = async () => {
         </div>
         <div class="input-group">
           <label>Date Requested</label>
-          <input v-model="form.dateRequested" type="date" />
+          <input v-model="form.dateRequested" type="date" disabled />
         </div>
         <div class="input-group">
           <label>Venue</label>
@@ -155,7 +214,7 @@ const handleSubmit = async () => {
         </div>
         <div class="input-group span-2">
           <label>Participants</label>
-          <input v-model="form.participants" placeholder="e.g. BSIT Students and Faculty" />
+          <input v-model="form.participants" placeholder="e.g. Students and Faculty" />
         </div>
       </div>
 
@@ -172,14 +231,10 @@ const handleSubmit = async () => {
           </thead>
           <tbody>
             <tr v-for="(item, index) in form.items" :key="index">
-              <td>
-                <input v-model="item.particulars" placeholder="Item Name" />
-              </td>
+              <td><input v-model="item.particulars" placeholder="Item Name" /></td>
               <td>
                 <input
                   type="number"
-                  min="0"
-                  step="0.01"
                   v-model="item.amount"
                   @input="calculateRow(item)"
                   @keypress="validateAmount($event)"
@@ -189,23 +244,29 @@ const handleSubmit = async () => {
               <td>
                 <input
                   type="number"
-                  min="1"
                   v-model="item.quantity"
                   @input="calculateRow(item)"
                   @keypress="validateQuantity($event)"
                   placeholder="1"
                 />
               </td>
-              <td>
+              <td class="text-right">
                 <input
                   :value="item.total.toLocaleString(undefined, { minimumFractionDigits: 2 })"
                   readonly
-                  tabindex="-1"
                   class="readonly-input"
                 />
               </td>
               <td style="text-align: center">
-                <button @click="removeItem(index)" class="btn-remove" title="Remove Row">×</button>
+                <button @click="removeItem(index)" class="btn-remove">×</button>
+              </td>
+            </tr>
+
+            <tr>
+              <td colspan="5" style="padding: 0">
+                <button type="button" @click="addItem" class="btn-add-row">
+                  + Add Another Item
+                </button>
               </td>
             </tr>
           </tbody>
@@ -213,11 +274,9 @@ const handleSubmit = async () => {
             <tr>
               <td colspan="3" class="text-right"><strong>GRAND TOTAL:</strong></td>
               <td class="grand-total">
-                {{ grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 }) }}
+                ₱ {{ grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 }) }}
               </td>
-              <td style="padding: 0">
-                <button @click="addItem" class="btn-add-row" title="Add Row">+</button>
-              </td>
+              <td></td>
             </tr>
           </tfoot>
         </table>

@@ -61,8 +61,30 @@ const currentTitle = computed(() => {
           <span>✅</span> For Approval
         </router-link>
 
+        <router-link
+          v-if="['Admin', 'admin'].includes(store.user?.role)"
+          to="/dashboard/release"
+          class="nav-item"
+          active-class="active"
+        >
+          <span>📦</span> For Release
+        </router-link>
+
         <router-link to="/dashboard/history" class="nav-item" active-class="active">
           <span>🕒</span> History
+        </router-link>
+
+        <router-link to="/dashboard/liquidation" class="nav-item" active-class="active">
+          <span>🧾</span> Liquidation
+        </router-link>
+
+        <router-link
+          v-if="['Admin', 'admin', 'Accounting', 'accounting'].includes(store.user?.role)"
+          to="/dashboard/reports"
+          class="nav-item"
+          active-class="active"
+        >
+          <span>📈</span> Reports
         </router-link>
 
         <router-link
@@ -90,7 +112,7 @@ const currentTitle = computed(() => {
         <div class="user-info">
           <span>
             Welcome,
-            <strong>{{ store.user?.firstname || store.user?.first_name || 'User' }}</strong>
+            <strong>{{ store.user?.first_name || 'User' }}</strong>
           </span>
         </div>
       </header>

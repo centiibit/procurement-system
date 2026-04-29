@@ -2,10 +2,12 @@
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import '@/assets/dashboard.css'
-import '@/assets/user-management.css' // <--- Your separate CSS file
+import '@/assets/user-management.css'
 
 const store = useAuthStore()
 const showModal = ref(false)
+const isEditing = ref(false) // Track if we are editing
+const editingId = ref(null) // Track the ID of the user being edited
 
 // Form Data matches Supabase columns
 const form = ref({
@@ -23,14 +25,35 @@ onMounted(() => {
 })
 
 const openModal = () => {
+  isEditing.value = false
+  resetForm()
+  showModal.value = true
+}
+
+const openEditModal = (u) => {
+  isEditing.value = true
+  editingId.value = u.id
+  // Populate form with existing data
+  form.value = {
+    first_name: u.first_name,
+    last_name: u.last_name,
+    department: u.department,
+    role: u.role,
+    wallet_address: u.wallet_address,
+    username: u.username,
+    password: u.password,
+  }
   showModal.value = true
 }
 
 const closeModal = () => {
   showModal.value = false
+  isEditing.value = false
+  editingId.value = null
+  resetForm()
 }
 
-const handleAdd = async () => {
+const handleSave = async () => {
   // 1. Validation
   if (
     !form.value.first_name ||
@@ -43,15 +66,21 @@ const handleAdd = async () => {
     return alert('All fields are required.')
   }
 
-  // 2. Submit
-  const success = await store.addAccount(form.value)
+  let success = false
+
+  if (isEditing.value) {
+    // 2a. Update logic
+    success = await store.updateAccount(editingId.value, form.value)
+  } else {
+    // 2b. Add logic
+    success = await store.addAccount(form.value)
+  }
 
   if (success) {
-    alert('User Added Successfully!')
-    resetForm()
+    alert(isEditing.value ? 'User Updated Successfully!' : 'User Added Successfully!')
     closeModal()
   } else {
-    alert('Failed to add user.')
+    alert('Operation failed.')
   }
 }
 
@@ -87,7 +116,7 @@ const resetForm = () => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="u in store.accounts" :key="u.id">
+          <tr v-for="u in store.accounts" :key="u.id" :class="{ 'disabled-row': !u.is_active }">
             <td class="fw-bold">{{ u.first_name }} {{ u.last_name }}</td>
             <td>{{ u.department }}</td>
             <td class="mono">{{ u.username }}</td>
@@ -101,9 +130,15 @@ const resetForm = () => {
                   : 'Missing'
               }}
             </td>
-            <td>
-              <button v-if="u.role !== 'Admin'" @click="store.deleteAccount(u.id)" class="btn-del">
-                Delete
+            <td class="action-buttons">
+              <button @click="openEditModal(u)" class="btn-edit">Edit</button>
+
+              <button
+                v-if="u.role !== 'Admin'"
+                @click="store.toggleAccountStatus(u.id, u.is_active)"
+                :class="u.is_active ? 'btn-disable' : 'btn-enable'"
+              >
+                {{ u.is_active ? 'Disable' : 'Enable' }}
               </button>
             </td>
           </tr>
@@ -115,7 +150,7 @@ const resetForm = () => {
     <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Add New Employee</h3>
+          <h3>{{ isEditing ? 'Edit Employee' : 'Add New Employee' }}</h3>
           <button class="close-btn" @click="closeModal">×</button>
         </div>
 
@@ -128,12 +163,10 @@ const resetForm = () => {
             <label>Last Name</label>
             <input v-model="form.last_name" placeholder="e.g. Dela Cruz" />
           </div>
-
           <div class="input-group">
             <label>Department</label>
             <input v-model="form.department" placeholder="e.g. CSIT" />
           </div>
-
           <div class="input-group">
             <label>Role</label>
             <select v-model="form.role">
@@ -144,23 +177,22 @@ const resetForm = () => {
               <option>Staff</option>
             </select>
           </div>
-
           <div class="input-group">
             <label>Username</label>
             <input v-model="form.username" placeholder="Login Username" />
           </div>
           <div class="input-group">
             <label>Password</label>
-            <input v-model="form.password" type="password" placeholder="Login Password" />
+            <input v-model="form.password" type="text" placeholder="Login Password" />
           </div>
-
           <div class="input-group full-width">
             <label>MetaMask Wallet Address</label>
             <input v-model="form.wallet_address" placeholder="0x..." />
           </div>
-
           <div class="input-group full-width">
-            <button @click="handleAdd" class="btn-add">Save User</button>
+            <button @click="handleSave" class="btn-add">
+              {{ isEditing ? 'Update User' : 'Save User' }}
+            </button>
           </div>
         </div>
       </div>

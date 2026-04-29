@@ -11,10 +11,9 @@ export const useRequestStore = defineStore('request', () => {
   const createRequest = async (requestData) => {
     loading.value = true
     try {
-      // PATCH: Capture the initial total into original_total field
       const finalPayload = {
         ...requestData,
-        original_total: requestData.grand_total, // This locks the faculty's starting request amount
+        original_total: requestData.grand_total, // Locks faculty's starting request amount
       }
 
       const { data, error: err } = await supabase.from('requests').insert([finalPayload]).select()
@@ -59,7 +58,7 @@ export const useRequestStore = defineStore('request', () => {
     }
   }
 
-  // 3. FETCH HISTORY (Universal for all roles)
+  // 3. FETCH HISTORY
   const fetchUserHistory = async (user) => {
     if (!user || !user.role) {
       console.warn('fetchUserHistory: User data not ready yet.')
@@ -76,9 +75,8 @@ export const useRequestStore = defineStore('request', () => {
         query = query.ilike('submitted_by_name', fullName)
       } else if (user.role === 'Dean') {
         query = query.eq('department', user.department)
-      } else if (user.role === 'Accounting' || user.role === 'Admin' || user.role === 'admin') {
-        console.log(`Admin/Accounting fetching the complete record history.`)
       }
+      // Admin/Accounting see complete record history
 
       const { data, error: err } = await query
       if (err) throw err
@@ -91,35 +89,56 @@ export const useRequestStore = defineStore('request', () => {
     }
   }
 
-  // 4. APPROVE REQUEST (Supports Budget Adjustments)
+  // 4. FETCH ALL REQUESTS (Powers the Admin Reports)
+  const fetchAllRequests = async () => {
+    loading.value = true
+    try {
+      const { data, error: err } = await supabase
+        .from('requests')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (err) throw err
+      requests.value = data
+    } catch (err) {
+      console.error('Fetch All Requests Error:', err.message)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 5. APPROVE REQUEST (Updates status to Approved by Admin)
   const approveRequest = async (id, role, approverName, adjustments = null) => {
     try {
       const timestamp = new Date().toISOString()
       let updates = {}
 
-      // If adjustments were made in the UI, update the working total and items
       if (adjustments) {
         updates.items = adjustments.items
         updates.grand_total = adjustments.grand_total
+        if (adjustments.blockchain_tx_hash) {
+          updates.blockchain_tx_hash = adjustments.blockchain_tx_hash
+        }
       }
 
       if (role === 'Dean') {
+        updates.status = 'Approved by Dean'
         updates.dean_approver = approverName
         updates.dean_approval_date = timestamp
-        updates.status = 'Approved by Dean'
       } else if (role === 'Accounting') {
+        updates.status = 'Approved by Accounting'
         updates.accounting_approver = approverName
         updates.accounting_approval_date = timestamp
-        updates.status = 'Approved by Accounting'
       } else if (role === 'Admin' || role === 'admin') {
+        updates.status = 'Approved by Admin'
         updates.admin_approver = approverName
         updates.admin_approval_date = timestamp
-        updates.status = 'Released'
       }
 
       const { error: err } = await supabase.from('requests').update(updates).eq('id', id)
       if (err) throw err
 
+      // Update local state by removing from the current view's list
       requests.value = requests.value.filter((r) => r.id !== id)
       return true
     } catch (err) {
@@ -128,7 +147,26 @@ export const useRequestStore = defineStore('request', () => {
     }
   }
 
-  // 5. REJECT REQUEST
+  // 6. RELEASE REQUEST (Off-chain manual step)
+  const releaseRequest = async (id) => {
+    try {
+      const { error: err } = await supabase
+        .from('requests')
+        .update({ status: 'Released' })
+        .eq('id', id)
+
+      if (err) throw err
+
+      // Update local state
+      requests.value = requests.value.filter((r) => r.id !== id)
+      return true
+    } catch (err) {
+      console.error('Release Error:', err.message)
+      return false
+    }
+  }
+
+  // 7. REJECT REQUEST
   const rejectRequest = async (id, reason) => {
     try {
       const { error: err } = await supabase
@@ -145,6 +183,64 @@ export const useRequestStore = defineStore('request', () => {
     }
   }
 
+  // 8. SUBMIT LIQUIDATION (Updated for On-Chain Hash)
+  const submitLiquidation = async (id, actualTotal, receiptRef, txHash) => {
+    try {
+      const { error } = await supabase
+        .from('requests')
+        .update({
+          liquidation_status: 'Submitted',
+          actual_total: actualTotal,
+          receipt_reference: receiptRef,
+          liquidation_tx_hash: txHash, // FIX: Separated into its own column
+        })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Update local state
+      const index = requests.value.findIndex((r) => r.id === id)
+      if (index !== -1) {
+        requests.value[index].liquidation_status = 'Submitted'
+        requests.value[index].actual_total = actualTotal
+        requests.value[index].receipt_reference = receiptRef
+        requests.value[index].liquidation_tx_hash = txHash
+      }
+      return true
+    } catch (error) {
+      console.error('Liquidation Error:', error)
+      return false
+    }
+  }
+
+  // 9. FINALIZE LIQUIDATION (Triple-Signature for Accounting & Admin)
+  const finalizeLiquidation = async (id, signature, role) => {
+    try {
+      let updates = {}
+
+      // Route based on role
+      if (role === 'Accounting' || role === 'accounting') {
+        updates.liquidation_status = 'Approved by Accounting'
+        updates.accounting_liq_signature = signature
+      } else if (role === 'Admin' || role === 'admin') {
+        updates.liquidation_status = 'Liquidated'
+        updates.admin_liq_signature = signature
+      }
+
+      const { error } = await supabase.from('requests').update(updates).eq('id', id)
+
+      if (error) throw error
+
+      // Update local state by removing it from the user's current pending list
+      requests.value = requests.value.filter((r) => r.id !== id)
+      return true
+    } catch (error) {
+      console.error('Finalize Liquidation Error:', error)
+      return false
+    }
+  }
+
+  // Make sure ALL state and functions are exported here
   return {
     requests,
     loading,
@@ -152,7 +248,11 @@ export const useRequestStore = defineStore('request', () => {
     createRequest,
     fetchPendingApprovals,
     fetchUserHistory,
+    fetchAllRequests,
     approveRequest,
+    releaseRequest,
     rejectRequest,
+    submitLiquidation,
+    finalizeLiquidation,
   }
 })

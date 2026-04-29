@@ -1,0 +1,252 @@
+/* --- WEB UI: BUTTONS & BADGES --- */
+.badge-blue {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+.badge-info {
+  background-color: #cffafe;
+  color: #0e7490;
+  border: 1px solid #a5f3fc;
+}
+.badge-success-dark {
+  background-color: #064e3b;
+  color: #34d399;
+  border: 1px solid #059669;
+}
+
+.btn-print-voucher {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.2s;
+}
+.btn-print-voucher:hover {
+  background: #059669;
+}
+
+/* --- WEB UI: MODAL & SECTIONS --- */
+.signature-verification-card {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #3b82f6;
+  border-radius: 0 8px 8px 0;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+.audit-summary-section {
+  margin-bottom: 25px;
+  background: #f8fafc;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.items-mini-card {
+  background: white;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 15px;
+}
+.items-table-history {
+  width: 100%;
+  border-collapse: collapse;
+}
+.items-table-history th {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  color: #94a3b8;
+  text-align: left;
+  padding-bottom: 5px;
+}
+.items-table-history td {
+  font-size: 0.8rem;
+  padding: 4px 0;
+  color: #334155;
+  border-bottom: 1px solid #f1f5f9;
+}
+.variance-comparison-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  text-align: center;
+}
+
+.blockchain-card-dark {
+  background: #0f172a;
+  border-radius: 10px;
+  padding: 18px;
+  color: white;
+  margin-bottom: 25px;
+}
+.engine-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.btn-engine {
+  border-radius: 8px;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  background: #3b82f6;
+  color: white;
+}
+
+/* --- HIDDEN ELEMENTS ON SCREEN --- */
+.print-only {
+  display: none;
+}
+
+/* --- PRINT FORMATTING: PROFESSIONAL VOUCHER --- */
+@media print {
+  /* Hide standard web UI elements */
+  header,
+  .sidebar,
+  .sidebar-overlay,
+  .header-flex,
+  .filter-tabs,
+  .card,
+  .no-print-header,
+  .btn-close-modal,
+  .no-print,
+  .menu-btn,
+  .user-info {
+    display: none !important;
+  }
+
+  /* Display print-only elements */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Reset layout for paper */
+  .page-content {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .modal-overlay {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: white !important;
+    padding: 0 !important;
+  }
+  .modal-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .modal-inner {
+    padding: 0 !important;
+  }
+
+  /* Formal Header Styling */
+  .formal-header {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+  .formal-header h2 {
+    font-size: 16pt;
+    margin: 0;
+    font-weight: 800;
+    color: #000;
+  }
+  .school-sub {
+    font-size: 10pt;
+    margin: 2px 0;
+    color: #333;
+  }
+  .doc-line {
+    border-bottom: 2px solid #000;
+    margin: 10px 0;
+  }
+  .voucher-title {
+    font-size: 14pt;
+    font-weight: bold;
+    text-decoration: underline;
+    margin-top: 15px;
+  }
+  .meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9pt;
+    margin-top: 10px;
+  }
+
+  /* Formal Table Styling */
+  .formal-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+  .formal-table th {
+    border: 1px solid #000;
+    background: #eee !important;
+    padding: 8px;
+    font-size: 10pt;
+  }
+  .formal-table td {
+    border: 1px solid #000;
+    padding: 8px;
+    font-size: 10pt;
+  }
+  .total-cell {
+    font-size: 12pt;
+    background: #f9f9f9 !important;
+  }
+
+  /* Verification Block */
+  .crypt-verification {
+    margin-top: 20px;
+    font-size: 8pt;
+    font-style: italic;
+    color: #444;
+    border: 1px dashed #ccc;
+    padding: 10px;
+  }
+
+  /* Formal Signatures Styling */
+  .formal-signatures {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 60px;
+  }
+  .sig-col {
+    width: 30%;
+    text-align: center;
+  }
+  .sig-cap {
+    font-size: 9pt;
+    text-align: left;
+    font-weight: bold;
+    margin-bottom: 30px;
+  }
+  .sig-space {
+    border-bottom: 1px solid #000;
+    margin-bottom: 5px;
+  }
+  .sig-name-val {
+    font-size: 10pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin: 0;
+  }
+  .sig-sub {
+    font-size: 8pt;
+    color: #555;
+  }
+
+  /* Force color and background printing */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

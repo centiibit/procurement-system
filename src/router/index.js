@@ -7,7 +7,9 @@ import DashboardHome from '../views/DashboardHome.vue'
 import CreateRequestView from '../views/CreateRequestView.vue'
 import ApprovalsView from '../views/ApprovalsView.vue'
 import HistoryView from '../views/HistoryView.vue'
-
+import ReleaseView from '@/views/ReleaseView.vue'
+import LiquidationView from '@/views/LiquidationView.vue'
+import ReportsView from '@/views/ReportsView.vue'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -63,6 +65,32 @@ const router = createRouter({
           name: 'history',
           component: HistoryView,
           meta: { title: 'Transaction History' },
+        },
+        {
+          path: 'release',
+          name: 'release',
+          component: ReleaseView,
+          meta: {
+            title: 'For Release',
+            allowedRole: ['Admin', 'admin'],
+          },
+        },
+        {
+          path: '/dashboard/liquidation',
+          name: 'Liquidation',
+          component: LiquidationView,
+          meta: {
+            title: 'Fund Liquidation',
+          },
+        },
+        {
+          path: '/dashboard/reports',
+          name: 'Reports',
+          component: ReportsView,
+          meta: {
+            title: 'Financial Reports',
+            allowedRole: ['admin', 'Admin'],
+          },
         },
       ],
     },
