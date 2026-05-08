@@ -15,7 +15,7 @@ A secure, hybrid Web3 web application designed to manage institutional funding r
 * **Frontend:** Vue 3 (Composition API), Vite, Pinia (State Management)
 * **Backend & Database:** Supabase (PostgreSQL, Authentication)
 * **Blockchain:** Solidity, Ethers.js v6, Ethereum Sepolia Testnet
-* **Development Environment:** Visual Studio Code, Remix IDE
+* **Development Environment:** Visual Studio Code, Node.js
 
 ## Prerequisites
 
